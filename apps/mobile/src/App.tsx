@@ -33,6 +33,20 @@ function linkStatusLabel(state: ServerLinkState): string {
   }
 }
 
+/** 模型目录的轻量投影（来自 IModelSelectionService.getView）。 */
+export interface ModelProviderLight {
+  providerId: string;
+  providerName: string;
+  models: Array<{ modelId: string; reasoningLevels: string[] }>;
+}
+
+/** 斜杠命令的轻量投影（来自 ICommandsService.list）。 */
+export interface SlashCommandLight {
+  name: string;
+  description?: string;
+  prompt: string;
+}
+
 /** 撤回队列项到 composer 的草稿注入信号（nonce 递增保证同文本重复撤回也生效）。 */
 interface ComposerDraftInjection {
   text: string;
@@ -180,6 +194,82 @@ function MobileShell() {
     return () => clearInterval(timer);
   }, [drawerOpen, refreshSessions]);
 
+  // 模型目录 + 斜杠命令：accessor 连上后取一次（RPC 服务已在通道上注册）。
+  const [modelProviders, setModelProviders] = useState<ModelProviderLight[]>([]);
+  const [slashCommands, setSlashCommands] = useState<SlashCommandLight[]>([]);
+  useEffect(() => {
+    if (!accessor) {
+      setModelProviders([]);
+      return;
+    }
+    let cancelled = false;
+    accessor.modelSelectionService
+      .getView()
+      .then((view: unknown) => {
+        if (cancelled) return;
+        const typed = view as {
+          providers?: Array<{
+            providerId: string;
+            providerName?: string;
+            models?: Array<{
+              modelId: string;
+              config?: {
+                enabled?: boolean;
+                optionSpecs?: { reasoningLevel?: { options?: string[] } };
+              };
+            }>;
+          }>;
+        };
+        setModelProviders(
+          (typed.providers ?? []).map((provider) => ({
+            providerId: provider.providerId,
+            providerName: provider.providerName ?? provider.providerId,
+            models: (provider.models ?? [])
+              .filter((model) => model.config?.enabled !== false)
+              .map((model) => ({
+                modelId: model.modelId,
+                reasoningLevels: model.config?.optionSpecs?.reasoningLevel?.options ?? [],
+              })),
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setModelProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessor]);
+
+  useEffect(() => {
+    if (!accessor || !workspacePath) {
+      setSlashCommands([]);
+      return;
+    }
+    let cancelled = false;
+    accessor.commandsService
+      .list({ workspacePath })
+      .then((result) => {
+        if (cancelled) return;
+        const all = [...(result.pluginCommands ?? []), ...(result.userCommands ?? [])];
+        setSlashCommands(
+          all
+            .filter((command) => command.enabled)
+            .map((command) => ({
+              name: command.name,
+              description: command.description,
+              prompt: command.prompt,
+            })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setSlashCommands([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessor, workspacePath]);
+
   const connected = workspace !== null && link.kind === "online";
   const statusMessage = workspaceError
     ? `Workspace unavailable: ${workspaceError}`
@@ -233,6 +323,19 @@ function MobileShell() {
         onStop={handleStop}
         toolbar={{
           config: conversation.view.config,
+          models: modelProviders,
+          commands: slashCommands,
+          onSwitchModel: (providerId, modelId, thought) => {
+            if (!agentService || !workspace || !activeSessionId) return;
+            void sendSwitchModelConfig(
+              agentService,
+              workspace,
+              activeSessionId,
+              providerId,
+              modelId,
+              thought,
+            ).catch(() => {});
+          },
           onSwitchThought: (thought) => {
             if (!agentService || !workspace || !activeSessionId) return;
             const sessionConfig = conversation.view.config;
