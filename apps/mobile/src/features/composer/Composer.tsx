@@ -55,6 +55,12 @@ export interface ComposerToolbarState {
   }> | null;
   /** 斜杠命令（ICommandsService.list 投影）：输入 "/" 时自动补全。 */
   commands: Array<{ name: string; description?: string; prompt: string }>;
+  /** 宿主内建命令（/goal /new /compact…）：选中即执行动作而非插入文本。 */
+  appCommands: Array<{ name: string; description?: string; run: () => void }>;
+  /** 技能（ISkillsService）：面板里以 $name 呈现，选中插入 "$name "。 */
+  skills: Array<{ name: string; description?: string }>;
+  /** 递增信号：让 Composer 打开 Mode sheet（/mode 内建命令）。 */
+  modeSheetSignal?: number;
   onSwitchModel: (providerId: string, modelId: string, thought: string) => void;
   onSwitchThought: (thought: string) => void;
   onSwitchMode: (mode: "build" | "edit" | "plan" | "yolo") => void;
@@ -374,12 +380,18 @@ export function Composer({
   const modeOption = MODE_OPTIONS.find((option) => option.value === modeValue) ?? MODE_OPTIONS[0];
   const thoughtLevels = sessionConfig?.thoughtLevels ?? [];
 
+  // /mode 内建命令：信号递增时自动打开 Mode sheet。
+  useEffect(() => {
+    if (toolbar?.modeSheetSignal) setSheet("mode");
+  }, [toolbar?.modeSheetSignal]);
+
   // 斜杠自动补全：仅当文本以 "/" 开头且还没有空格时（与桌面 SlashCommandPlugin 同口径）。
   const slashQuery = /^\/[a-zA-Z0-9_:-]*$/.test(text) ? text.slice(1).toLowerCase() : null;
-  const slashMatches =
-    slashQuery === null
-      ? []
-      : (toolbar?.commands ?? []).filter((command) => command.name.toLowerCase().includes(slashQuery)).slice(0, 8);
+  const builtInMatches = slashQuery === null ? [] : (toolbar?.appCommands ?? []).filter((command) => command.name.toLowerCase().includes(slashQuery));
+  const customMatches = slashQuery === null ? [] : (toolbar?.commands ?? []).filter((command) => command.name.toLowerCase().includes(slashQuery)).slice(0, 6);
+  const skillMatches = slashQuery === null ? [] : (toolbar?.skills ?? []).filter((skill) => skill.name.toLowerCase().includes(slashQuery)).slice(0, 6);
+  const slashPanelVisible =
+    builtInMatches.length > 0 || customMatches.length > 0 || skillMatches.length > 0;
 
   const pickModel = (provider: { providerId: string }, model: { modelId: string; reasoningLevels: string[] }) => {
     setSheet(null);
@@ -453,31 +465,92 @@ export function Composer({
           : undefined
       }
     >
-      {slashMatches.length > 0 ? (
+      {slashPanelVisible ? (
         <div className="relative">
-          <ul className="absolute bottom-1 left-0 right-0 z-10 max-h-56 overflow-y-auto rounded-xl border border-card-border bg-card py-1 shadow-2xl">
-            {slashMatches.map((command) => (
-              <li key={command.name}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setText(command.prompt);
-                    textAreaRef.current?.focus();
-                  }}
-                  className="flex w-full flex-col gap-0.5 px-3 py-2 text-left active:bg-surface-hover"
-                >
-                  <span className="font-mono text-ui-sm font-medium text-foreground">
-                    /{command.name}
-                  </span>
-                  {command.description ? (
-                    <span className="line-clamp-1 text-ui-xs text-foreground-subtlest">
-                      {command.description}
+          <div className="absolute bottom-1 left-0 right-0 z-10 max-h-72 overflow-y-auto rounded-xl border border-card-border bg-card py-1 shadow-2xl">
+            {builtInMatches.length > 0 ? (
+              <>
+                <p className="px-3 pb-0.5 pt-1.5 text-ui-xs font-medium uppercase tracking-wide text-foreground-subtlest">
+                  Commands
+                </p>
+                {builtInMatches.map((command) => (
+                  <button
+                    key={command.name}
+                    type="button"
+                    onClick={() => {
+                      setText("");
+                      textAreaRef.current?.focus();
+                      command.run();
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left active:bg-surface-hover"
+                  >
+                    <span className="font-mono text-ui-sm font-medium text-foreground">
+                      /{command.name}
                     </span>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+                    {command.description ? (
+                      <span className="min-w-0 flex-1 truncate text-ui-xs text-foreground-subtlest">
+                        {command.description}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </>
+            ) : null}
+            {customMatches.length > 0 ? (
+              <>
+                <p className="px-3 pb-0.5 pt-1.5 text-ui-xs font-medium uppercase tracking-wide text-foreground-subtlest">
+                  Custom commands
+                </p>
+                {customMatches.map((command) => (
+                  <button
+                    key={command.name}
+                    type="button"
+                    onClick={() => {
+                      setText(command.prompt);
+                      textAreaRef.current?.focus();
+                    }}
+                    className="flex w-full flex-col gap-0.5 px-3 py-2 text-left active:bg-surface-hover"
+                  >
+                    <span className="font-mono text-ui-sm font-medium text-foreground">
+                      /{command.name}
+                    </span>
+                    {command.description ? (
+                      <span className="line-clamp-1 text-ui-xs text-foreground-subtlest">
+                        {command.description}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </>
+            ) : null}
+            {skillMatches.length > 0 ? (
+              <>
+                <p className="px-3 pb-0.5 pt-1.5 text-ui-xs font-medium uppercase tracking-wide text-foreground-subtlest">
+                  Skills
+                </p>
+                {skillMatches.map((skill) => (
+                  <button
+                    key={skill.name}
+                    type="button"
+                    onClick={() => {
+                      setText(`$${skill.name} `);
+                      textAreaRef.current?.focus();
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left active:bg-surface-hover"
+                  >
+                    <span className="font-mono text-ui-sm font-medium text-foreground">
+                      ${skill.name}
+                    </span>
+                    {skill.description ? (
+                      <span className="min-w-0 flex-1 truncate text-ui-xs text-foreground-subtlest">
+                        {skill.description}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-1.5 pb-2 pt-0.5">

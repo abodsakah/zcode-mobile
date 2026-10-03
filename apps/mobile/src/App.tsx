@@ -7,7 +7,13 @@ import {
 import { hasExplicitServerConfig } from "./lib/serverConfig.js";
 import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath } from "./lib/workspace.js";import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
-import { sendStopCommand, sendSwitchCollaborationMode, sendSwitchModelConfig } from "./lib/conversationChannel.js";
+import {
+  sendCompactCommand,
+  sendGoalCommand,
+  sendStopCommand,
+  sendSwitchCollaborationMode,
+  sendSwitchModelConfig,
+} from "./lib/conversationChannel.js";
 import { serverHttpUrl } from "./lib/serverConfig.js";
 import { useKeyboardInset } from "./lib/useKeyboardInset.js";
 import { TopBar } from "./ui/TopBar.js";
@@ -270,6 +276,77 @@ function MobileShell() {
     };
   }, [accessor, workspacePath]);
 
+  // 技能（ISkillsService）：斜杠面板的 Skills 段，选中插入 "$name "。
+  const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
+  useEffect(() => {
+    if (!accessor || !workspacePath) {
+      setSkills([]);
+      return;
+    }
+    let cancelled = false;
+    accessor.skillsService
+      .list({ workspacePath })
+      .then((result: unknown) => {
+        if (cancelled) return;
+        const typed = result as {
+          skills?: Array<{ name?: string; description?: string; enabled?: boolean }>;
+        };
+        setSkills(
+          (typed.skills ?? [])
+            .filter((skill) => skill.name && skill.enabled !== false)
+            .map((skill) => ({ name: skill.name as string, description: skill.description })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setSkills([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessor, workspacePath]);
+
+  // /goal 的宿主弹层：目标文本 → sendGoalCommand（会话级）。
+  const [goalSheetOpen, setGoalSheetOpen] = useState(false);
+  const [goalDraft, setGoalDraft] = useState("");
+  const [goalSending, setGoalSending] = useState(false);
+  const submitGoal = useCallback(() => {
+    const trimmed = goalDraft.trim();
+    if (!trimmed || !agentService || !workspace || goalSending) return;
+    setGoalSending(true);
+    void sendGoalCommand(agentService, workspace, activeSessionId, trimmed)
+      .then(() => {
+        setGoalSheetOpen(false);
+        setGoalDraft("");
+      })
+      .catch(() => {})
+      .finally(() => setGoalSending(false));
+  }, [agentService, workspace, activeSessionId, goalDraft, goalSending]);
+
+  // 内建斜杠命令：动作在宿主执行（与桌面 appCommands 同一层）。
+  const appCommands = useMemo(
+    () => [
+      { name: "new", description: "Start a new chat", run: handleNewChat },
+      {
+        name: "goal",
+        description: activeSessionId ? "Set the session goal" : "Open a chat first — goal is per session",
+        run: () => setGoalSheetOpen(true),
+      },
+      {
+        name: "compact",
+        description: activeSessionId ? "Compact the session context" : "Open a chat first",
+        run: () => {
+          if (agentService && workspace && activeSessionId) {
+            void sendCompactCommand(agentService, workspace, activeSessionId).catch(() => {});
+          }
+        },
+      },
+      { name: "mode", description: "Switch collaboration mode", run: () => setModeSheetSignal((n) => n + 1) },
+    ],
+    [activeSessionId, agentService, handleNewChat, workspace],
+  );
+  // /mode 选中后让 Composer 自动打开 Mode sheet（递增信号驱动）。
+  const [modeSheetSignal, setModeSheetSignal] = useState(0);
+
   const connected = workspace !== null && link.kind === "online";
   const statusMessage = workspaceError
     ? `Workspace unavailable: ${workspaceError}`
@@ -325,6 +402,9 @@ function MobileShell() {
           config: conversation.view.config,
           models: modelProviders,
           commands: slashCommands,
+          appCommands,
+          skills,
+          modeSheetSignal,
           onSwitchModel: (providerId, modelId, thought) => {
             if (!agentService || !workspace || !activeSessionId) return;
             void sendSwitchModelConfig(
@@ -362,6 +442,44 @@ function MobileShell() {
         }}
         onFocusTextArea={() => setScrollSignal((signal) => signal + 1)}
       />
+      {goalSheetOpen ? (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Session goal">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setGoalSheetOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-card-border bg-background px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+            <h3 className="pb-2 text-ui-base font-semibold text-foreground">Session goal</h3>
+            <textarea
+              value={goalDraft}
+              onChange={(event) => setGoalDraft(event.target.value)}
+              rows={3}
+              autoFocus
+              placeholder="What should this session pursue?"
+              className="w-full resize-none rounded-xl border border-card-border bg-card px-3 py-2.5 text-mobile-input-safe leading-6 text-foreground outline-none placeholder:text-foreground-subtlest focus:border-input-border-hover"
+            />
+            {!activeSessionId ? (
+              <p className="pt-1 text-ui-xs text-warning">
+                Open a chat first — the goal is set per session.
+              </p>
+            ) : null}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setGoalSheetOpen(false)}
+                className="h-11 flex-1 rounded-xl border border-card-border bg-card text-ui-base font-medium text-foreground-subtle active:bg-surface-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!goalDraft.trim() || goalSending || !activeSessionId}
+                onClick={submitGoal}
+                className="h-11 flex-1 rounded-xl bg-brand text-ui-base font-semibold text-white disabled:opacity-40"
+              >
+                {goalSending ? "Sending…" : "Set goal"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <SessionDrawer
         open={drawerOpen}
         sessions={sessions}

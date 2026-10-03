@@ -364,3 +364,38 @@ export async function sendSwitchCollaborationMode(
     issuedAt: Date.now(),
   });
 }
+
+/** 设置会话目标（桌面 /goal 同源）。 */
+export async function sendGoalCommand(
+  agentService: ConversationAgentService,
+  workspace: WorkspaceTargetLite,
+  sessionId: string | null,
+  text: string,
+): Promise<void> {
+  await ensureHandshake(agentService);
+  await sendCommand(agentService, workspace, {
+    commandId: newCommandId(),
+    clientId: getV4ClientId(),
+    sessionId,
+    type: "sendGoalCommand",
+    payload: { text },
+    issuedAt: Date.now(),
+  });
+}
+
+/** 压缩会话上下文（桌面 /compact 同源）。 */
+export async function sendCompactCommand(
+  agentService: ConversationAgentService,
+  workspace: WorkspaceTargetLite,
+  sessionId: string,
+): Promise<void> {
+  await ensureHandshake(agentService);
+  await sendCommand(agentService, workspace, {
+    commandId: newCommandId(),
+    clientId: getV4ClientId(),
+    sessionId,
+    type: "compact",
+    payload: {},
+    issuedAt: Date.now(),
+  });
+}
