@@ -1,0 +1,11 @@
+{
+  "appId": "com.zcode.mobile",
+  "appName": "ZCode",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

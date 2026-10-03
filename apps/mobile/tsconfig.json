@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["es2025", "dom", "dom.iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src"],
+  // mobile 只消费 workspace 包入口；不显式引用对应 project 时，tsc 会顺着
+  // package exports 重新把各包源码当输入编译。补 references 后与根
+  // `pnpm typecheck` 的构建顺序一致，mobile 直接消费各包已生成的声明产物。
+  "references": [
+    { "path": "../../packages/rpc" },
+    { "path": "../../packages/services" },
+    { "path": "../../packages/client" }
+  ]
+}

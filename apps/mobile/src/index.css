@@ -1,0 +1,12 @@
+/*
+ * Mobile 专属 Tailwind 入口。
+ *
+ * packages/ui/src/styles.css 用 `@import "tailwindcss" source(".")` 把扫描范围
+ * 锁定在 ui 包源码内（web/desktop 的类名恰好与 ui 重合才没暴露问题）。
+ * Mobile 不能依赖这种偶然重合：这里关闭自动探测（source(none)），
+ * 显式声明 mobile 自身源码的扫描路径，并继续复用 ui 的完整主题样式
+ * （@theme 语义 token、zai-dark 变量、shadcn variant 等）。
+ */
+@import "tailwindcss" source(none);
+@import "@zcode/ui/styles.css";
+@source "./**/*.{ts,tsx}";

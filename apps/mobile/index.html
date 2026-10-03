@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover：WebView 内容延伸到刘海/Home Indicator 区域，
+         页面内通过 env(safe-area-inset-*) 消费安全区（Capacitor 同样生效）。 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#161616" />
+    <meta name="color-scheme" content="dark" />
+    <title>ZCode Mobile</title>
+    <script>
+      (() => {
+        // Mobile 首版固定 Zai Dark（与 web/desktop 默认主题一致）；
+        // 后续主题切换交给 useTheme hook 接管时再补 system/light 分支。
+        const theme = "dark";
+        document.documentElement.setAttribute("data-zcode-browser-theme-surface", theme);
+        document.documentElement.style.colorScheme = theme;
+        document.documentElement.classList.add("dark");
+      })();
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      /* 应用高度用 dvh：浏览器地址栏收展时避免 100vh 跳动；Capacitor WebView 下等于可视高度。 */
+      #root {
+        height: 100dvh;
+      }
+
+      body {
+        background: var(--color-background, #161616);
+        color: var(--color-foreground, #e2e8f0);
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        /* 禁止整页橡皮筋回弹；双击缩放延迟交给 touch-action: manipulation 处理。 */
+        overscroll-behavior: none;
+        touch-action: manipulation;
+      }
+
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* @zcode/ui 的全局样式为 Electron vibrancy 把 html/body/#root 置为透明；
+         浏览器/移动端入口必须按语义背景覆盖该桌面专属行为，
+         否则 WebView 工具栏、overscroll 与页面画布会回退为系统白底。 */
+      html[data-zcode-browser-theme-surface="dark"],
+      html[data-zcode-browser-theme-surface="dark"] body,
+      html[data-zcode-browser-theme-surface="dark"] #root {
+        background: var(--color-background, #161616) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
