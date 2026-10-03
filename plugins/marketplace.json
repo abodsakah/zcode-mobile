@@ -4,8 +4,8 @@
     {
       "name": "zcode-mobile-pairing",
       "source": "./zcode-mobile-pairing",
-      "version": "0.1.0",
-      "description": "Pair the ZCode mobile app to this Mac from the desktop UI: /pair-mobile starts a token-protected local server from the zcode-mobile fork and shows a scannable QR",
+      "version": "0.1.1",
+      "description": "Pair the ZCode mobile app to this Mac from the desktop UI: /pair-mobile starts a token-protected local server on your desktop workspace and shows a scannable QR; the app can then browse any project and its desktop chats",
       "displayName": "ZCode Mobile Pairing",
       "description_i18n": {
         "zh-CN": "从桌面 UI 一键配对 ZCode 手机 App：/pair-mobile 启动本地配对服务器并显示二维码"

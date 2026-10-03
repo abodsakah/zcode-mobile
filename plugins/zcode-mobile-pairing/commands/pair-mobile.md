@@ -32,10 +32,15 @@ Run `tailscale ip -4`. If it prints a 100.x.y.z address, that is the bind IP. If
 gives no address, fall back to `ipconfig getifaddr en0` and say clearly in the final output that the
 pairing only works on the local Wi-Fi network, not remotely. If neither yields an IP, stop and report.
 
-## Step 4 — Pick a free port and generate the token
+## Step 4 — Pick a free port, a starting workspace, and generate the token
 
 Default port: 3141. If `lsof -nP -iTCP:3141 -sTCP:LISTEN` shows any listener, bump to 3142, 3143, …
 until free (check each). Generate the token with `openssl rand -hex 16`.
+
+Starting workspace: if the user named a project in their request, use its absolute path. Otherwise
+read `~/.zcode/v2/setting.json` (JSON) and pick the first value that looks like an absolute path to an
+existing directory (the desktop app's most recent workspace); fall back to `$HOME`. The phone can
+switch to any other project later from the session drawer, so this only sets where it lands first.
 
 ## Step 5 — Launch the pairing server
 
@@ -43,13 +48,15 @@ From the repo's `packages/server` directory run:
 
 ```
 PORT=<port> ZCODE_SERVER_HOST=<bind-ip> ZCODE_SERVER_AUTH_TOKEN=<token> \
+  ZCODE_SERVER_WORKSPACE=<workspace-path> \
   nohup node dist/entry-http.js >> ~/.zcode-mobile/pairing-server.log 2>&1 &
 echo $! > ~/.zcode-mobile/pairing-server.pid
 ```
 
-Write `PORT=<port>`, `TOKEN=<token>`, `BIND_IP=<bind-ip>` into `~/.zcode-mobile/pairing-server.env`.
-Binding to the exact Tailscale IP (not 0.0.0.0) is deliberate: only devices on the user's own tailnet
-can reach the server. Never print the token anywhere except the pairing output in the final step.
+Write `PORT=<port>`, `TOKEN=<token>`, `BIND_IP=<bind-ip>`, `WORKSPACE=<workspace-path>` into
+`~/.zcode-mobile/pairing-server.env`. Binding to the exact Tailscale IP (not 0.0.0.0) is deliberate:
+only devices on the user's own tailnet can reach the server. Never print the token anywhere except
+the pairing output in the final step.
 
 ## Step 6 — Wait for it to come up
 
@@ -70,8 +77,11 @@ Present exactly this, in this order:
 
 1. The QR code (fenced code block).
 2. The pairing URL on its own line in an inline code block, for copy-paste.
-3. Phone steps, briefly: Tailscale ON on the phone (same tailnet) → open the ZCode app → paste the
+3. Which project the app opens in (the Step 4 workspace) and that any other project's sessions —
+   including all previous desktop chats for it — are reachable via **Sessions drawer → Switch
+   project** (type the project's absolute path, or tap a recent one).
+4. Phone steps, briefly: Tailscale ON on the phone (same tailnet) → open the ZCode app → paste the
    URL (or scan the QR with any scanner and open it) → the app connects and lists this Mac's sessions.
-4. The stop one-liner: `kill $(cat ~/.zcode-mobile/pairing-server.pid)` — and note the server keeps
+5. The stop one-liner: `kill $(cat ~/.zcode-mobile/pairing-server.pid)` — and note the server keeps
    running until then.
-5. If the bind IP came from the Wi-Fi fallback (Step 3), repeat the local-network-only warning here.
+6. If the bind IP came from the Wi-Fi fallback (Step 3), repeat the local-network-only warning here.
