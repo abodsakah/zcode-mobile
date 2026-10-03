@@ -86,19 +86,21 @@ export function WorkflowDigestCard({
         onClick={() => setExpanded((value) => !value)}
         className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left active:bg-surface"
       >
-        <span
-          aria-hidden
-          className={`size-2 shrink-0 rounded-full ${summary ? RUN_STATUS_DOT[summary.status] : RUN_STATUS_DOT.stopped}`}
-        />
+        <span className="relative flex size-2 shrink-0" aria-hidden>
+          {live ? (
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" />
+          ) : null}
+          <span
+            className={`relative inline-flex size-2 rounded-full ${summary ? RUN_STATUS_DOT[summary.status] : RUN_STATUS_DOT.stopped}`}
+          />
+        </span>
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className={`shrink-0 text-ui-xs ${summary ? RUN_STATUS_TEXT[summary.status] : "text-foreground-subtle"}`}>
-              {digestKindLabel(digest)}
-            </span>
-            <span className="min-w-0 truncate text-ui-base text-foreground">{name}</span>
-          </span>
+          <span className="block truncate text-ui-base font-medium text-foreground">{name}</span>
           {summary !== undefined ? (
             <span className="mt-0.5 flex min-w-0 items-center gap-2 text-ui-xs text-foreground-subtlest">
+              <span className={`shrink-0 font-medium ${RUN_STATUS_TEXT[summary.status]}`}>
+                {digestKindLabel(digest)}
+              </span>
               <span className="shrink-0 tabular-nums">
                 {summary.stepsSettled}/{summary.stepsTotal} steps
               </span>
@@ -111,8 +113,36 @@ export function WorkflowDigestCard({
                 <span className="min-w-0 truncate">{summary.currentPhase}</span>
               ) : null}
             </span>
+          ) : (
+            <span className="mt-0.5 block text-ui-xs text-foreground-subtlest">
+              {digestKindLabel(digest)}
+            </span>
+          )}
+          {/* 步骤进度条：running 时可感知推进 */}
+          {summary !== undefined && summary.stepsTotal > 0 ? (
+            <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-surface">
+              <span
+                className={`block h-full rounded-full transition-all duration-500 ${
+                  live ? "bg-gradient-to-r from-brand to-success animate-pulse" : "bg-success"
+                }`}
+                style={{
+                  width: `${Math.min(100, Math.round((summary.stepsSettled / summary.stepsTotal) * 100))}%`,
+                }}
+              />
+            </span>
           ) : null}
         </span>
+        {live ? (
+          <span className="flex shrink-0 items-center gap-0.5" aria-label="working">
+            {[0, 1, 2].map((index) => (
+              <span
+                key={index}
+                className="size-1 animate-bounce rounded-full bg-brand"
+                style={{ animationDelay: `${index * 150}ms`, animationDuration: "0.9s" }}
+              />
+            ))}
+          </span>
+        ) : null}
         {pendingQuestions.length > 0 ? (
           <span
             data-testid="workflow-digest-questions"

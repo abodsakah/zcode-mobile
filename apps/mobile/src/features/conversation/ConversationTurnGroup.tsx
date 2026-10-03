@@ -33,6 +33,7 @@ import type {
 } from "@zcode/shared/zcode-protocol-v4";
 import { AgentSpawnRow } from "./AgentToolCallRow.js";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "./icons.js";
+import { Markdown } from "../../ui/Markdown.js";
 import { ToolCallCard } from "./ToolCallCard.js";
 import {
   resolveTurnDurationLabel,
@@ -380,9 +381,8 @@ function TurnGroupImpl({
           key={row.rowId}
           data-row-id={row.rowId}
           data-testid={testId(TID_V4_ROW, String(row.rowId))}
-          className="whitespace-pre-wrap break-words text-ui-base text-foreground"
         >
-          {row.text}
+          <Markdown text={row.text} streaming={row.state === "streaming"} />
           {row === lastAssistantText ? (
             <AssistantCopyRow text={row.text} rowId={row.rowId} createdAt={row.createdAt} />
           ) : null}

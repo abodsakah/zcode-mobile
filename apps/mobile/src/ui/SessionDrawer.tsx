@@ -61,8 +61,22 @@ function FolderIcon({ className }: { className?: string }) {
   );
 }
 
-function CheckIcon({ className }: { className?: string }) {
+/** 运行中会话的活动指示：三点跳动（侧栏里一眼可见"正在干活"）。 */
+function WorkingDots() {
   return (
+    <span className="flex shrink-0 items-center gap-0.5" aria-label="working">
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="size-1 animate-bounce rounded-full bg-brand"
+          style={{ animationDelay: `${index * 150}ms`, animationDuration: "0.9s" }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {  return (
     <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden="true">
       <path
         d="M5 13l4 4L19 7"
@@ -143,15 +157,8 @@ export function SessionDrawer({
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* 品牌头 */}
-        <div className="flex shrink-0 items-center gap-2.5 pl-[max(env(safe-area-inset-left),1rem)] pr-3 pt-[max(env(safe-area-inset-top),0.875rem)]">
-          <span
-            className="flex size-8 items-center justify-center rounded-[0.6rem] bg-gradient-to-br from-sky-400 to-indigo-500 text-ui-sm font-bold text-white shadow-sm"
-            aria-hidden="true"
-          >
-            Z
-          </span>
-          <h2 className="flex-1 text-ui-lg font-semibold tracking-tight">ZCode</h2>
+        {/* 顶栏：仅关闭（无品牌元素） */}
+        <div className="flex shrink-0 items-center justify-end pl-[max(env(safe-area-inset-left),1rem)] pr-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
           <button
             type="button"
             aria-label="Close sidebar"
@@ -286,9 +293,13 @@ export function SessionDrawer({
                         <span className="min-w-0 flex-1 truncate text-ui-base text-foreground">
                           {session.title || "Untitled"}
                         </span>
-                        <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
-                          {formatRelativeTime(session.updatedAt)}
-                        </span>
+                        {session.status === "running" ? (
+                          <WorkingDots />
+                        ) : (
+                          <span className="shrink-0 text-ui-xs tabular-nums text-foreground-subtlest">
+                            {formatRelativeTime(session.updatedAt)}
+                          </span>
+                        )}
                       </button>
                     </li>
                   );

@@ -5,8 +5,7 @@ import {
   type ServerLinkState,
 } from "./lib/ServerLink.js";
 import { hasExplicitServerConfig } from "./lib/serverConfig.js";
-import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath } from "./lib/workspace.js";
-import { useActiveSession, useSessions } from "./lib/sessionStore.js";
+import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath } from "./lib/workspace.js";import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
 import { sendStopCommand } from "./lib/conversationChannel.js";
 import { useKeyboardInset } from "./lib/useKeyboardInset.js";
@@ -53,21 +52,28 @@ function MobileShell() {
   }
   const connectionEpoch = epochRef.current;
 
-  // workspace 选择：用户切换过的优先，否则跟随服务器列表（与桌面侧栏一致）；切换要整体重置下游。
+  // workspace 选择：用户切换过的优先，否则跟随服务器列表（与桌面侧栏一致）。
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(() =>
     readStoredWorkspacePath(),
   );
-  const { workspaceList, workspace, error: workspaceError } = useWorkspace(
+  const { workspaceList, workspace: serverWorkspace, error: workspaceError } = useWorkspace(
     config,
     accessor,
     selectedWorkspacePath,
   );
+  // 以字符串路径为唯一身份，workspace 对象用 useMemo 固定：server-info 每次重取都会
+  // 重建对象，若下游 effect 以对象为依赖会把刚创建的会话打回草稿态。
+  const workspacePath = selectedWorkspacePath ?? serverWorkspace?.workspacePath ?? null;
+  const workspace = useMemo(
+    () => (workspacePath ? { workspacePath } : null),
+    [workspacePath],
+  );
 
-  // accessor 或 workspace 任一变化都让下游订阅/列表整体重置（合并成一个 epoch）。
+  // accessor 或 workspace 路径任一变化都让下游订阅/列表整体重置（合并成一个 epoch）。
   const [dataEpoch, setDataEpoch] = useState(0);
   useEffect(() => {
     setDataEpoch((epoch) => epoch + 1);
-  }, [accessor, workspace]);
+  }, [accessor, workspacePath]);
 
   const handleSwitchWorkspace = useCallback((path: string) => {
     rememberWorkspacePath(path);
@@ -115,10 +121,10 @@ function MobileShell() {
     clearPermissionError();
   }, [pendingPermissionId, clearPermissionError]);
 
-  // workspace 切换后旧会话不再属于当前列表，清空活动会话。
+  // workspace 切换后旧会话不再属于当前列表，清空活动会话（以路径字符串为准，防身份抖动）。
   useEffect(() => {
     setActiveSessionId(null);
-  }, [workspace, setActiveSessionId]);
+  }, [workspacePath, setActiveSessionId]);
 
   const activeSessionTitle = activeSessionId
     ? sessions?.find((session) => session.sessionId === activeSessionId)?.title
@@ -165,6 +171,13 @@ function MobileShell() {
     refreshSessions();
     setDrawerOpen(true);
   };
+
+  // 侧栏打开期间轮询会话列表：运行中指示（跳动点）保持新鲜。
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const timer = setInterval(() => refreshSessions(), 5000);
+    return () => clearInterval(timer);
+  }, [drawerOpen, refreshSessions]);
 
   const connected = workspace !== null && link.kind === "online";
   const statusMessage = workspaceError
