@@ -1,6 +1,7 @@
 import type { ZCodeSessionInfo } from "@zcode/shared";
 import { useState } from "react";
 import { clearStoredServerConfig } from "../lib/serverConfig.js";
+import type { WorkspaceTarget } from "../lib/workspace.js";
 
 function formatRelativeTime(timestampMs: number): string {
   const deltaMs = Date.now() - timestampMs;
@@ -28,8 +29,8 @@ interface SessionDrawerProps {
   serverOrigin: string;
   /** 当前生效的 workspace 路径（用户选择或服务器默认）；未知时为 null。 */
   workspacePath: string | null;
-  /** 最近使用过的 workspace，可一键切回。 */
-  recentWorkspaces: string[];
+  /** 服务器提供的项目列表（与桌面侧栏一致），点按即切换。 */
+  workspaceList: WorkspaceTarget[];
   onSwitchWorkspace: (path: string) => void;
   onClose: () => void;
   onOpenSession: (sessionId: string) => void;
@@ -45,14 +46,13 @@ export function SessionDrawer({
   activeSessionId,
   serverOrigin,
   workspacePath,
-  recentWorkspaces,
+  workspaceList,
   onSwitchWorkspace,
   onClose,
   onOpenSession,
   onNewChat,
 }: SessionDrawerProps) {
   const [switching, setSwitching] = useState(false);
-  const [draftPath, setDraftPath] = useState("");
   return (
     <div
       className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
@@ -143,60 +143,61 @@ export function SessionDrawer({
           </ul>
           <div className="shrink-0 border-t border-card-border px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
             {switching ? (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={draftPath}
-                  onChange={(event) => setDraftPath(event.target.value)}
-                  placeholder="/Users/…/your-project"
-                  autoFocus
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  className="h-11 w-full rounded-xl border border-card-border bg-card px-3 text-ui-sm text-foreground outline-none placeholder:text-foreground-subtlest focus:border-input-border-focused"
-                />
-                {recentWorkspaces.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {recentWorkspaces.map((path) => (
-                      <button
-                        key={path}
-                        type="button"
-                        onClick={() => {
-                          setSwitching(false);
-                          onSwitchWorkspace(path);
-                        }}
-                        className="max-w-full truncate rounded-lg border border-card-border bg-card px-2.5 py-1.5 text-ui-xs text-foreground-subtle active:bg-surface-hover"
-                      >
-                        {path.split("/").filter(Boolean).pop() || path}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSwitching(false)}
-                    className="h-10 flex-1 rounded-xl border border-card-border bg-card text-ui-sm font-medium text-foreground-subtle active:bg-surface-hover"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!draftPath.trim()}
-                    onClick={() => {
-                      setSwitching(false);
-                      onSwitchWorkspace(draftPath);
-                    }}
-                    className="h-10 flex-1 rounded-xl bg-primary text-ui-sm font-semibold text-primary-foreground disabled:opacity-40"
-                  >
-                    Open project
-                  </button>
-                </div>
+              <div className="space-y-1">
+                <p className="px-1 pb-1 text-ui-xs text-foreground-subtlest">Projects</p>
+                <ul className="max-h-56 space-y-0.5 overflow-y-auto">
+                  {workspaceList.map((entry) => {
+                    const current = entry.workspacePath === workspacePath;
+                    return (
+                      <li key={entry.workspacePath}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSwitching(false);
+                            onSwitchWorkspace(entry.workspacePath);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left active:bg-surface-hover ${
+                            current ? "bg-card" : ""
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-ui-base text-foreground">
+                            {entry.label ?? entry.workspacePath}
+                          </span>
+                          {current ? (
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="size-4 shrink-0 text-foreground"
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M5 13l4 4L19 7"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => setSwitching(false)}
+                  className="h-10 w-full rounded-xl border border-card-border bg-card text-ui-sm font-medium text-foreground-subtle active:bg-surface-hover"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <div className="space-y-1">
                 <p className="break-all text-ui-xs text-foreground-subtlest">
-                  {workspacePath ?? "Workspace unknown"}
+                  {workspaceList.find((entry) => entry.workspacePath === workspacePath)?.label ??
+                    workspacePath ??
+                    "Workspace unknown"}
                 </p>
                 <div className="flex items-center justify-between">
                   <button

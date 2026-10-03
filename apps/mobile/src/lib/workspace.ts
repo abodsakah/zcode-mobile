@@ -4,13 +4,13 @@ import { serverHttpUrl, type ServerConfig } from "./serverConfig.js";
 
 export interface WorkspaceTarget {
   workspacePath: string;
+  /** 展示名（桌面侧栏同款：目录 basename）。 */
+  label?: string;
 }
 
 const STORAGE_KEY_WORKSPACE = "zcode:mobile:workspace";
-const STORAGE_KEY_RECENT_WORKSPACES = "zcode:mobile:recent-workspaces";
-const MAX_RECENT_WORKSPACES = 5;
 
-/** 用户切换过的 workspace；未切换时为 null（跟随服务器默认）。 */
+/** 用户切换过的 workspace；未切换时为 null（跟随服务器默认/列表第一项）。 */
 export function readStoredWorkspacePath(): string | null {
   try {
     return localStorage.getItem(STORAGE_KEY_WORKSPACE);
@@ -19,51 +19,37 @@ export function readStoredWorkspacePath(): string | null {
   }
 }
 
-/** 记住选择并维护最近列表（去重、最新在前、最多 5 条）。 */
+/** 记住选择（重载/重启后回到该项目）。 */
 export function rememberWorkspacePath(path: string): void {
   const trimmed = path.trim();
   if (!trimmed) return;
   try {
     localStorage.setItem(STORAGE_KEY_WORKSPACE, trimmed);
-    const recent: string[] = JSON.parse(
-      localStorage.getItem(STORAGE_KEY_RECENT_WORKSPACES) ?? "[]",
-    );
-    const next = [trimmed, ...recent.filter((item) => item !== trimmed)].slice(
-      0,
-      MAX_RECENT_WORKSPACES,
-    );
-    localStorage.setItem(STORAGE_KEY_RECENT_WORKSPACES, JSON.stringify(next));
   } catch {
     // storage 不可用时静默降级
   }
 }
 
-export function readRecentWorkspaces(): string[] {
-  try {
-    const recent: unknown = JSON.parse(
-      localStorage.getItem(STORAGE_KEY_RECENT_WORKSPACES) ?? "[]",
-    );
-    return Array.isArray(recent) ? recent.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 /**
  * 会话/命令 RPC 全部要求 workspace 定位（ZCodeAgentWorkspaceTarget.workspacePath）。
- * mobile 通过 /api/server-info 拿服务器默认 workspace（与 packages/web/src/main.tsx
- * 的 resolveWebBootstrap 同一来源），不写死任何路径。
+ * 服务器在 server-info 里返回与桌面侧栏一致的项目列表（recentProjects 投影）；
+ * 用户的选择优先，否则用列表第一项。不写死任何路径。
  */
 export function useWorkspace(
   config: ServerConfig,
   accessor: IServiceAccessor | null,
-): { workspace: WorkspaceTarget | null; error: string | null } {
-  const [workspace, setWorkspace] = useState<WorkspaceTarget | null>(null);
+  selectedPath: string | null,
+): {
+  workspaceList: WorkspaceTarget[];
+  workspace: WorkspaceTarget | null;
+  error: string | null;
+} {
+  const [workspaceList, setWorkspaceList] = useState<WorkspaceTarget[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessor) {
-      setWorkspace(null);
+      setWorkspaceList([]);
       setError(null);
       return;
     }
@@ -77,19 +63,18 @@ export function useWorkspace(
           throw new Error(`server-info ${response.status}`);
         }
         const info = (await response.json()) as {
-          workspaces?: Array<{ path?: string }>;
+          workspaces?: Array<{ path?: string; label?: string }>;
         };
-        const path = info.workspaces?.[0]?.path;
-        if (!path) {
-          throw new Error("server reported no workspace");
-        }
+        const list = (info.workspaces ?? [])
+          .filter((entry): entry is { path: string; label?: string } => Boolean(entry.path))
+          .map((entry) => ({ workspacePath: entry.path, label: entry.label }));
         if (!cancelled) {
-          setWorkspace({ workspacePath: path });
+          setWorkspaceList(list);
           setError(null);
         }
       } catch (err) {
         if (!cancelled) {
-          setWorkspace(null);
+          setWorkspaceList([]);
           setError(err instanceof Error ? err.message : String(err));
         }
       }
@@ -99,5 +84,10 @@ export function useWorkspace(
     };
   }, [config, accessor]);
 
-  return { workspace, error };
+  const workspace =
+    workspaceList.find((entry) => entry.workspacePath === selectedPath) ??
+    workspaceList[0] ??
+    null;
+
+  return { workspaceList, workspace, error };
 }

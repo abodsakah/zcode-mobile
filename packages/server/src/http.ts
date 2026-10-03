@@ -1,7 +1,8 @@
 /* eslint-disable max-lines -- HTTP、WebSocket 与静态资源路由集中注册，保持同一鉴权顺序。 */
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { hostname } from "node:os";
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
@@ -26,6 +27,7 @@ import {
   IBotsService,
   IProviderProvisioningTargetService,
 } from "@zcode/services";
+import { getAppConfigDir } from "@zcode/services/node";
 import {
   botProviders,
   formatLogPrefix,
@@ -153,17 +155,43 @@ function resolveServerId(options: HttpServerOptions): string {
   );
 }
 
+/**
+ * 桌面端侧栏的最近项目列表（~/.zcode/v2/setting.json 的 recentProjects）。
+ * 手机端因此看到与桌面一致的项目清单，无需手输路径。读取失败静默回退为空。
+ */
+function loadDesktopRecentProjects(): ServerRemoteWorkspaceInfo[] {
+  try {
+    const settingPath = join(getAppConfigDir(), "setting.json");
+    const parsed = JSON.parse(readFileSync(settingPath, "utf8")) as {
+      recentProjects?: unknown;
+    };
+    if (!Array.isArray(parsed.recentProjects)) return [];
+    const seen = new Set<string>();
+    const result: ServerRemoteWorkspaceInfo[] = [];
+    for (const entry of parsed.recentProjects) {
+      if (typeof entry !== "string" || !entry.startsWith("/") || seen.has(entry)) continue;
+      if (!existsSync(entry) || !statSync(entry).isDirectory()) continue;
+      seen.add(entry);
+      result.push({ path: entry, label: basename(entry) || entry });
+      if (result.length >= 20) break;
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
 function resolveServerWorkspaces(options: HttpServerOptions): ServerRemoteWorkspaceInfo[] {
   if (options.workspaces) {
     return options.workspaces;
   }
   const workspacePath = readTrimmedEnv("ZCODE_SERVER_WORKSPACE") || process.cwd();
-  return [
-    {
-      path: workspacePath,
-      label: basename(workspacePath) || workspacePath,
-    },
-  ];
+  const primary: ServerRemoteWorkspaceInfo = {
+    path: workspacePath,
+    label: basename(workspacePath) || workspacePath,
+  };
+  const rest = loadDesktopRecentProjects().filter((entry) => entry.path !== workspacePath);
+  return [primary, ...rest];
 }
 
 function createServerInfo(options: HttpServerOptions): ServerRemoteInfo {

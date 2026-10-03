@@ -5,7 +5,7 @@ import {
   type ServerLinkState,
 } from "./lib/ServerLink.js";
 import { hasExplicitServerConfig } from "./lib/serverConfig.js";
-import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath, readRecentWorkspaces } from "./lib/workspace.js";
+import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath } from "./lib/workspace.js";
 import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
 import { sendStopCommand } from "./lib/conversationChannel.js";
@@ -53,23 +53,22 @@ function MobileShell() {
   }
   const connectionEpoch = epochRef.current;
 
-  // workspace 选择：用户切换过的路径优先，否则跟随服务器默认；切换要整体重置下游。
-  const serverWorkspace = useWorkspace(config, accessor);
+  // workspace 选择：用户切换过的优先，否则跟随服务器列表（与桌面侧栏一致）；切换要整体重置下游。
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(() =>
     readStoredWorkspacePath(),
   );
-  const workspacePath =
-    selectedWorkspacePath ?? serverWorkspace.workspace?.workspacePath ?? null;
+  const { workspaceList, workspace, error: workspaceError } = useWorkspace(
+    config,
+    accessor,
+    selectedWorkspacePath,
+  );
 
   // accessor 或 workspace 任一变化都让下游订阅/列表整体重置（合并成一个 epoch）。
   const [dataEpoch, setDataEpoch] = useState(0);
   useEffect(() => {
     setDataEpoch((epoch) => epoch + 1);
-  }, [accessor, workspacePath]);
+  }, [accessor, workspace]);
 
-  const { error: workspaceError } = serverWorkspace;
-  const workspace = workspacePath ? { workspacePath } : null;
-  const recentWorkspaces = readRecentWorkspaces();
   const handleSwitchWorkspace = useCallback((path: string) => {
     rememberWorkspacePath(path);
     setSelectedWorkspacePath(path.trim());
@@ -119,7 +118,7 @@ function MobileShell() {
   // workspace 切换后旧会话不再属于当前列表，清空活动会话。
   useEffect(() => {
     setActiveSessionId(null);
-  }, [workspacePath, setActiveSessionId]);
+  }, [workspace, setActiveSessionId]);
 
   const activeSessionTitle = activeSessionId
     ? sessions?.find((session) => session.sessionId === activeSessionId)?.title
@@ -232,8 +231,8 @@ function MobileShell() {
         error={sessionsError}
         activeSessionId={activeSessionId}
         serverOrigin={config.origin}
-        workspacePath={workspacePath}
-        recentWorkspaces={recentWorkspaces}
+        workspacePath={workspace?.workspacePath ?? null}
+        workspaceList={workspaceList}
         onSwitchWorkspace={handleSwitchWorkspace}
         onClose={() => setDrawerOpen(false)}
         onOpenSession={handleOpenSession}
