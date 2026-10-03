@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { hostname } from "node:os";
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
@@ -346,6 +346,55 @@ export function createHttpServer(
   }
 
   app.get("/api/server-info", (c) => c.json(createServerInfo(options)));
+
+  // 已装插件（桌面 + 菜单同源：~/.zcode/cli/plugins/installed_plugins.json）。
+  // 描述取各插件 manifest；无图标文件（桌面图标走远程目录）→ 客户端用字牌回退。
+  app.get("/api/plugins", (c) => {
+    const hueFor = (value: string): number => {
+      let hash = 0;
+      for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) % 360;
+      }
+      return hash;
+    };
+    const plugins: Array<{
+      id: string;
+      name: string;
+      version: string | null;
+      description: string | null;
+      hue: number;
+    }> = [];
+    try {
+      const installedPath = join(dirname(getAppConfigDir()), "cli", "plugins", "installed_plugins.json");
+      const parsed = JSON.parse(readFileSync(installedPath, "utf8")) as {
+        plugins?: Array<{ id?: string; name?: string; installPath?: string; version?: string }>;
+      };
+      for (const entry of parsed.plugins ?? []) {
+        if (!entry.id || !entry.installPath) continue;
+        let description: string | null = null;
+        try {
+          const manifest = JSON.parse(
+            readFileSync(join(entry.installPath, ".zcode-plugin", "plugin.json"), "utf8"),
+          ) as { description?: unknown };
+          if (typeof manifest.description === "string") description = manifest.description;
+        } catch {
+          // manifest 缺失时描述留空
+        }
+        plugins.push({
+          id: entry.id,
+          name: entry.name ?? entry.id.split("@")[0] ?? entry.id,
+          version: entry.version ?? null,
+          description,
+          hue: hueFor(entry.id),
+        });
+        if (plugins.length >= 100) break;
+      }
+    } catch {
+      // 未安装任何插件 / 文件缺失 → 空列表
+    }
+    return c.json({ plugins });
+  });
+
   app.post("/api/rpc-host-capability", (c) => c.json(hostCapabilities.issue()));
 
   // 普通 `/ws` 永远是 terminal-client；浏览器/任意客户端设置旧 mode header

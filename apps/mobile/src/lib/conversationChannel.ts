@@ -15,6 +15,7 @@ import {
   type ConversationTopicFrame,
   type ConversationTopicWireCandidate,
   type HelloMessage,
+  type SessionConfigState,
   type SessionControl,
   type SessionMetaState,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -35,6 +36,8 @@ export interface ConversationViewState {
   rows: ConversationRow[];
   control: SessionControl | null;
   meta: SessionMetaState | null;
+  /** 会话配置投影：provider/model/thought/thoughtLevels/mode（工具条的数据源）。 */
+  config: SessionConfigState | null;
   /** 服务器全序行数（快照 window 可能只含尾部）。 */
   totalCount: number;
 }
@@ -141,6 +144,7 @@ export class ConversationChannel {
     rows: [],
     control: null,
     meta: null,
+    config: null,
     totalCount: 0,
   };
 
@@ -200,6 +204,7 @@ export class ConversationChannel {
           rows: [...snapshot.rows.window],
           control: snapshot.control,
           meta: snapshot.meta,
+          config: snapshot.config,
           totalCount: snapshot.rows.totalCount,
         });
         continue;
@@ -207,6 +212,7 @@ export class ConversationChannel {
       let rows = this.state.rows;
       let control = this.state.control;
       let meta = this.state.meta;
+      let config = this.state.config;
       for (const delta of frame.payload.deltas) {
         rows = applyDeltaToRows(rows, delta);
         if (delta.op === "state.updated") {
@@ -216,9 +222,12 @@ export class ConversationChannel {
           if (delta.patch.meta) {
             meta = { ...(meta as SessionMetaState), ...delta.patch.meta };
           }
+          if (delta.patch.config) {
+            config = { ...(config as SessionConfigState), ...delta.patch.config };
+          }
         }
       }
-      this.publish({ rows, control, meta });
+      this.publish({ rows, control, meta, config });
     }
   }
 
@@ -316,4 +325,42 @@ export async function sendCreateSessionCommand(
     throw new Error(`createSession ack missing result (status=${ack.status})`);
   }
   return ack.result.sessionId;
+}
+
+/** 切思考档位（provider/model 保持不变）：工具条的 Thinking 选择。 */
+export async function sendSwitchModelConfig(
+  agentService: ConversationAgentService,
+  workspace: WorkspaceTargetLite,
+  sessionId: string,
+  provider: string,
+  model: string,
+  thought: string,
+): Promise<void> {
+  await ensureHandshake(agentService);
+  await sendCommand(agentService, workspace, {
+    commandId: newCommandId(),
+    clientId: getV4ClientId(),
+    sessionId,
+    type: "switchModelConfig",
+    payload: { provider, model, thought },
+    issuedAt: Date.now(),
+  });
+}
+
+/** 切协作模式（build/edit/plan/yolo）：工具条的 Mode 选择。 */
+export async function sendSwitchCollaborationMode(
+  agentService: ConversationAgentService,
+  workspace: WorkspaceTargetLite,
+  sessionId: string,
+  mode: "build" | "edit" | "plan" | "yolo",
+): Promise<void> {
+  await ensureHandshake(agentService);
+  await sendCommand(agentService, workspace, {
+    commandId: newCommandId(),
+    clientId: getV4ClientId(),
+    sessionId,
+    type: "switchCollaborationMode",
+    payload: { mode },
+    issuedAt: Date.now(),
+  });
 }

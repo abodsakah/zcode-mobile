@@ -5,6 +5,7 @@ import {
   TID_V4_COMPOSER_SEND,
   TID_V4_STOP,
 } from "@zcode/shared";
+import type { SessionConfigState } from "@zcode/shared/zcode-protocol-v4";
 import { useKeyboardInset } from "../../lib/useKeyboardInset.js";
 
 /**
@@ -40,6 +41,232 @@ const MAX_COMPOSER_HEIGHT_PX = 160;
 export interface ComposerDraftInjection {
   text: string;
   nonce: number;
+}
+
+/** 工具条数据面（对齐桌面 composer 底行：模型 / 思考档位 / 模式 / 插件）。 */
+export interface ComposerToolbarState {
+  /** v4 snapshot.config：provider/model/thought/thoughtLevels/mode。 */
+  config: SessionConfigState | null;
+  onSwitchThought: (thought: string) => void;
+  onSwitchMode: (mode: "build" | "edit" | "plan" | "yolo") => void;
+  /** 服务器已安装插件列表端点（/api/plugins）；null 时 + 菜单不渲染插件。 */
+  pluginsUrl: string | null;
+}
+
+interface PluginEntry {
+  id: string;
+  name: string;
+  version: string | null;
+  description: string | null;
+  hue: number;
+}
+
+const MODE_OPTIONS: Array<{ value: "build" | "edit" | "plan" | "yolo"; label: string; hint: string }> = [
+  { value: "build", label: "Build", hint: "Full access — edits and runs commands" },
+  { value: "edit", label: "Edit", hint: "Edits files, asks before commands" },
+  { value: "plan", label: "Plan", hint: "Read-only planning" },
+  { value: "yolo", label: "YOLO", hint: "No approval prompts" },
+];
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function BottomSheet({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[70dvh] flex-col rounded-t-2xl border-t border-card-border bg-background pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+        <div className="flex shrink-0 items-center justify-between px-4 pb-2">
+          <h3 className="text-ui-base font-semibold text-foreground">{title}</h3>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-foreground-subtle active:bg-surface-hover"
+          >
+            <svg viewBox="0 0 24 24" className="size-4.5" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function OptionRow({
+  label,
+  subtitle,
+  selected,
+  onClick,
+}: {
+  label: string;
+  subtitle?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left active:bg-surface-hover ${
+        selected ? "bg-card" : ""
+      }`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-ui-sm ${selected ? "font-medium text-foreground" : "text-foreground"}`}>
+          {label}
+        </span>
+        {subtitle ? (
+          <span className="block truncate text-ui-xs text-foreground-subtlest">{subtitle}</span>
+        ) : null}
+      </span>
+      {selected ? <CheckIconSmall /> : null}
+    </button>
+  );
+}
+
+function CheckIconSmall() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-brand" fill="none" aria-hidden="true">
+      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Chip({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-w-0 shrink-0 items-center gap-1 rounded-full border border-card-border bg-card px-2.5 py-1.5 text-ui-xs text-foreground-subtle active:bg-surface-hover"
+    >
+      {icon}
+      <span className="max-w-36 truncate font-medium">{label}</span>
+      <svg viewBox="0 0 24 24" className="size-3 shrink-0 opacity-60" fill="none" aria-hidden="true">
+        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+function BrainIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" aria-hidden="true">
+      <path
+        d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 9 19h1a2 2 0 0 0 2-2V5zm0 0a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2A3 3 0 0 1 15 19h-1a2 2 0 0 1-2-2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CubeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" aria-hidden="true">
+      <path
+        d="M12 3l7.5 4.3v8.4L12 20l-7.5-4.3V7.3L12 3zm0 0v8.6m7.5-4.3L12 11.6 4.5 7.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 已装插件列表（/api/plugins；与桌面 + 菜单同一份安装面）。 */
+function PluginsSheetBody({ pluginsUrl }: { pluginsUrl: string }) {
+  const [state, setState] = useState<{ loading: boolean; plugins: PluginEntry[]; error: string | null }>({
+    loading: true,
+    plugins: [],
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(pluginsUrl, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<{ plugins?: PluginEntry[] }>;
+      })
+      .then((data) => {
+        if (!cancelled) setState({ loading: false, plugins: data.plugins ?? [], error: null });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ loading: false, plugins: [], error: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginsUrl]);
+
+  if (state.loading) {
+    return <p className="px-3 py-3 text-ui-sm text-foreground-subtle">Loading plugins…</p>;
+  }
+  if (state.error) {
+    return <p className="break-words px-3 py-3 text-ui-sm text-destructive">Failed to load plugins: {state.error}</p>;
+  }
+  if (state.plugins.length === 0) {
+    return <p className="px-3 py-3 text-ui-sm text-foreground-subtle">No plugins installed on the desktop.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-0.5 pb-1">
+      {state.plugins.map((plugin) => (
+        <li key={plugin.id} className="flex items-center gap-2.5 rounded-xl px-2 py-2">
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ui-sm font-bold text-white"
+            style={{ background: `hsl(${plugin.hue} 45% 42%)` }}
+            aria-hidden="true"
+          >
+            {plugin.name.charAt(0).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-ui-sm font-medium text-foreground">{plugin.name}</span>
+            {plugin.description ? (
+              <span className="line-clamp-2 block text-ui-xs leading-4 text-foreground-subtlest">
+                {plugin.description}
+              </span>
+            ) : null}
+          </span>
+          {plugin.version ? (
+            <span className="shrink-0 text-ui-xs text-foreground-subtlest">{plugin.version}</span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export interface ComposerProps {
@@ -124,12 +351,19 @@ export function Composer({
   placeholder = "Message…",
   insetSafeArea = false,
   draftInjection = null,
+  toolbar = null,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sheet, setSheet] = useState<"model" | "mode" | "plugins" | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const keyboardInset = useKeyboardInset();
   const lastInjectionNonceRef = useRef(0);
+
+  const sessionConfig = toolbar?.config ?? null;
+  const modeValue = (sessionConfig?.mode ?? "build") as "build" | "edit" | "plan" | "yolo";
+  const modeOption = MODE_OPTIONS.find((option) => option.value === modeValue) ?? MODE_OPTIONS[0];
+  const thoughtLevels = sessionConfig?.thoughtLevels ?? [];
 
   // 宿主草稿注入（队列撤回）：覆盖当前草稿并聚焦，用户直接在原文上改。
   useEffect(() => {
@@ -192,6 +426,41 @@ export function Composer({
           : undefined
       }
     >
+      <div className="flex flex-wrap items-center gap-1.5 pb-2 pt-0.5">
+        <Chip
+          label={sessionConfig?.model || "Model"}
+          icon={<CubeIcon />}
+          onClick={() => setSheet("model")}
+        />
+        {thoughtLevels.length > 0 ? (
+          <Chip
+            label={capitalize(sessionConfig?.thought || "Thinking")}
+            icon={<BrainIcon />}
+            onClick={() => setSheet("model")}
+          />
+        ) : null}
+        <Chip
+          label={modeOption.label}
+          icon={
+            <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="none" aria-hidden="true">
+              <path
+                d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          }
+          onClick={() => setSheet("mode")}
+        />
+        {toolbar?.pluginsUrl ? (
+          <Chip
+            label="Plugins"
+            icon={<PlusIcon />}
+            onClick={() => setSheet("plugins")}
+          />
+        ) : null}
+      </div>
       <div className="flex items-end gap-2">
         <textarea
           ref={textAreaRef}
@@ -246,6 +515,60 @@ export function Composer({
           )}
         </div>
       </div>
+      {sheet === "model" ? (
+        <BottomSheet title="Model & thinking" onClose={() => setSheet(null)}>
+          <p className="px-3 pb-1 pt-1 text-ui-xs font-medium uppercase tracking-wide text-foreground-subtlest">
+            Model
+          </p>
+          <OptionRow
+            label={sessionConfig?.model || "Session default"}
+            subtitle={sessionConfig?.provider}
+            selected
+            onClick={() => setSheet(null)}
+          />
+          {thoughtLevels.length > 0 ? (
+            <>
+              <p className="px-3 pb-1 pt-3 text-ui-xs font-medium uppercase tracking-wide text-foreground-subtlest">
+                Thinking level
+              </p>
+              {thoughtLevels.map((level) => (
+                <OptionRow
+                  key={level}
+                  label={capitalize(level)}
+                  selected={sessionConfig?.thought === level}
+                  onClick={() => {
+                    setSheet(null);
+                    if (sessionConfig && level !== sessionConfig.thought) {
+                      toolbar?.onSwitchThought(level);
+                    }
+                  }}
+                />
+              ))}
+            </>
+          ) : null}
+        </BottomSheet>
+      ) : null}
+      {sheet === "mode" ? (
+        <BottomSheet title="Mode" onClose={() => setSheet(null)}>
+          {MODE_OPTIONS.map((option) => (
+            <OptionRow
+              key={option.value}
+              label={option.label}
+              subtitle={option.hint}
+              selected={modeValue === option.value}
+              onClick={() => {
+                setSheet(null);
+                if (modeValue !== option.value) toolbar?.onSwitchMode(option.value);
+              }}
+            />
+          ))}
+        </BottomSheet>
+      ) : null}
+      {sheet === "plugins" && toolbar?.pluginsUrl ? (
+        <BottomSheet title="Plugins" onClose={() => setSheet(null)}>
+          <PluginsSheetBody pluginsUrl={toolbar.pluginsUrl} />
+        </BottomSheet>
+      ) : null}
     </div>
   );
 }

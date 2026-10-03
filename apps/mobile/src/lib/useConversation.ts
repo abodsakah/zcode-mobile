@@ -14,6 +14,7 @@ const IDLE_STATE: ConversationViewState = {
   rows: [],
   control: null,
   meta: null,
+  config: null,
   totalCount: 0,
 };
 

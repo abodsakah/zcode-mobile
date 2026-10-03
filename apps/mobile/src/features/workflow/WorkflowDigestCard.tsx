@@ -2,7 +2,7 @@ import { useState } from "react";
 import { workflowRunStatusLabel } from "./statusPanelModel.js";
 import { WorkflowArtifactChips } from "./WorkflowArtifactChips.js";
 import type { MobileWorkflowDigest } from "./workflowDigestsModel.js";
-import { RUN_STATUS_DOT, RUN_STATUS_TEXT } from "./statusPanelModel.js";
+import { RUN_STATUS_DOT } from "./statusPanelModel.js";
 
 /**
  * 轮尾 run 卡的移动端形态（桌面 WorkflowRunDigest 的收窄）：
@@ -84,23 +84,33 @@ export function WorkflowDigestCard({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left active:bg-surface"
+        className="flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left active:bg-surface"
       >
-        <span className="relative flex size-2 shrink-0" aria-hidden>
+        <span className="relative flex size-1.5 shrink-0" aria-hidden>
           {live ? (
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" />
           ) : null}
           <span
-            className={`relative inline-flex size-2 rounded-full ${summary ? RUN_STATUS_DOT[summary.status] : RUN_STATUS_DOT.stopped}`}
+            className={`relative inline-flex size-1.5 rounded-full ${summary ? RUN_STATUS_DOT[summary.status] : RUN_STATUS_DOT.stopped}`}
           />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-ui-base font-medium text-foreground">{name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={`shrink-0 rounded px-1 py-px font-mono text-[10px] uppercase leading-4 tracking-wide ${
+                summary && live
+                  ? "bg-brand/10 text-brand"
+                  : summary
+                    ? "bg-surface text-foreground-subtle"
+                    : "bg-surface text-foreground-subtlest"
+              }`}
+            >
+              {digestKindLabel(digest)}
+            </span>
+            <span className="min-w-0 truncate text-ui-sm font-medium text-foreground">{name}</span>
+          </span>
           {summary !== undefined ? (
-            <span className="mt-0.5 flex min-w-0 items-center gap-2 text-ui-xs text-foreground-subtlest">
-              <span className={`shrink-0 font-medium ${RUN_STATUS_TEXT[summary.status]}`}>
-                {digestKindLabel(digest)}
-              </span>
+            <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] leading-4 text-foreground-subtlest">
               <span className="shrink-0 tabular-nums">
                 {summary.stepsSettled}/{summary.stepsTotal} steps
               </span>
@@ -110,7 +120,7 @@ export function WorkflowDigestCard({
                 </span>
               ) : null}
               {summary.currentPhase ? (
-                <span className="min-w-0 truncate">{summary.currentPhase}</span>
+                <span className="min-w-0 truncate font-sans">{summary.currentPhase}</span>
               ) : null}
             </span>
           ) : (
@@ -120,10 +130,10 @@ export function WorkflowDigestCard({
           )}
           {/* 步骤进度条：running 时可感知推进 */}
           {summary !== undefined && summary.stepsTotal > 0 ? (
-            <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-surface">
+            <span className="mt-1 block h-0.5 w-full overflow-hidden rounded-full bg-surface">
               <span
                 className={`block h-full rounded-full transition-all duration-500 ${
-                  live ? "bg-gradient-to-r from-brand to-success animate-pulse" : "bg-success"
+                  live ? "bg-brand" : "bg-success"
                 }`}
                 style={{
                   width: `${Math.min(100, Math.round((summary.stepsSettled / summary.stepsTotal) * 100))}%`,
@@ -146,7 +156,7 @@ export function WorkflowDigestCard({
         {pendingQuestions.length > 0 ? (
           <span
             data-testid="workflow-digest-questions"
-            className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 text-ui-xs font-medium text-warning"
+            className="shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-warning"
           >
             {pendingQuestions.length === 1 ? "1 question" : `${pendingQuestions.length} questions`}
           </span>

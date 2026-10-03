@@ -7,7 +7,8 @@ import {
 import { hasExplicitServerConfig } from "./lib/serverConfig.js";
 import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath } from "./lib/workspace.js";import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
-import { sendStopCommand } from "./lib/conversationChannel.js";
+import { sendStopCommand, sendSwitchCollaborationMode, sendSwitchModelConfig } from "./lib/conversationChannel.js";
+import { serverHttpUrl } from "./lib/serverConfig.js";
 import { useKeyboardInset } from "./lib/useKeyboardInset.js";
 import { TopBar } from "./ui/TopBar.js";
 import { SessionDrawer } from "./ui/SessionDrawer.js";
@@ -230,6 +231,27 @@ function MobileShell() {
         disabled={!workspace || link.kind !== "online"}
         canStop={conversation.view.control?.canStop ?? false}
         onStop={handleStop}
+        toolbar={{
+          config: conversation.view.config,
+          onSwitchThought: (thought) => {
+            if (!agentService || !workspace || !activeSessionId) return;
+            const sessionConfig = conversation.view.config;
+            if (!sessionConfig) return;
+            void sendSwitchModelConfig(
+              agentService,
+              workspace,
+              activeSessionId,
+              sessionConfig.provider,
+              sessionConfig.model,
+              thought,
+            ).catch(() => {});
+          },
+          onSwitchMode: (mode) => {
+            if (!agentService || !workspace || !activeSessionId) return;
+            void sendSwitchCollaborationMode(agentService, workspace, activeSessionId, mode).catch(() => {});
+          },
+          pluginsUrl: serverHttpUrl(config, "/api/plugins"),
+        }}
         draftInjection={composerDraft}
         onSend={(text) => {
           setScrollSignal((signal) => signal + 1);
