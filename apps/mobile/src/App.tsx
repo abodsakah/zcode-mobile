@@ -5,7 +5,7 @@ import {
   type ServerLinkState,
 } from "./lib/ServerLink.js";
 import { hasExplicitServerConfig } from "./lib/serverConfig.js";
-import { useWorkspace } from "./lib/workspace.js";
+import { useWorkspace, readStoredWorkspacePath, rememberWorkspacePath, readRecentWorkspaces } from "./lib/workspace.js";
 import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
 import { sendStopCommand } from "./lib/conversationChannel.js";
@@ -53,9 +53,30 @@ function MobileShell() {
   }
   const connectionEpoch = epochRef.current;
 
-  const { workspace, error: workspaceError } = useWorkspace(config, accessor);
+  // workspace 选择：用户切换过的路径优先，否则跟随服务器默认；切换要整体重置下游。
+  const serverWorkspace = useWorkspace(config, accessor);
+  const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(() =>
+    readStoredWorkspacePath(),
+  );
+  const workspacePath =
+    selectedWorkspacePath ?? serverWorkspace.workspace?.workspacePath ?? null;
+
+  // accessor 或 workspace 任一变化都让下游订阅/列表整体重置（合并成一个 epoch）。
+  const [dataEpoch, setDataEpoch] = useState(0);
+  useEffect(() => {
+    setDataEpoch((epoch) => epoch + 1);
+  }, [accessor, workspacePath]);
+
+  const { error: workspaceError } = serverWorkspace;
+  const workspace = workspacePath ? { workspacePath } : null;
+  const recentWorkspaces = readRecentWorkspaces();
+  const handleSwitchWorkspace = useCallback((path: string) => {
+    rememberWorkspacePath(path);
+    setSelectedWorkspacePath(path.trim());
+    setDrawerOpen(false);
+  }, []);
   const { sessions, error: sessionsError, loading: sessionsLoading, refresh: refreshSessions } =
-    useSessions(accessor, workspace, connectionEpoch);
+    useSessions(accessor, workspace, dataEpoch);
   const [activeSessionId, setActiveSessionId] = useActiveSession(sessions);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workflowPanelOpen, setWorkflowPanelOpen] = useState(false);
@@ -67,7 +88,7 @@ function MobileShell() {
     agentService,
     workspace,
     activeSessionId,
-    connectionEpoch,
+    dataEpoch,
     (createdSessionId) => {
       setActiveSessionId(createdSessionId);
       refreshSessions();
@@ -79,7 +100,7 @@ function MobileShell() {
     agentService,
     workspace,
     activeSessionId,
-    connectionEpoch,
+    dataEpoch,
   );
   const permissions = usePermissionInteractions(
     agentService,
@@ -94,6 +115,11 @@ function MobileShell() {
   useEffect(() => {
     clearPermissionError();
   }, [pendingPermissionId, clearPermissionError]);
+
+  // workspace 切换后旧会话不再属于当前列表，清空活动会话。
+  useEffect(() => {
+    setActiveSessionId(null);
+  }, [workspacePath, setActiveSessionId]);
 
   const activeSessionTitle = activeSessionId
     ? sessions?.find((session) => session.sessionId === activeSessionId)?.title
@@ -206,6 +232,9 @@ function MobileShell() {
         error={sessionsError}
         activeSessionId={activeSessionId}
         serverOrigin={config.origin}
+        workspacePath={workspacePath}
+        recentWorkspaces={recentWorkspaces}
+        onSwitchWorkspace={handleSwitchWorkspace}
         onClose={() => setDrawerOpen(false)}
         onOpenSession={handleOpenSession}
         onNewChat={handleNewChat}

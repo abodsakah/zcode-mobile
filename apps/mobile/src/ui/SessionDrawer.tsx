@@ -1,4 +1,5 @@
 import type { ZCodeSessionInfo } from "@zcode/shared";
+import { useState } from "react";
 import { clearStoredServerConfig } from "../lib/serverConfig.js";
 
 function formatRelativeTime(timestampMs: number): string {
@@ -25,12 +26,17 @@ interface SessionDrawerProps {
   error: string | null;
   activeSessionId: string | null;
   serverOrigin: string;
+  /** 当前生效的 workspace 路径（用户选择或服务器默认）；未知时为 null。 */
+  workspacePath: string | null;
+  /** 最近使用过的 workspace，可一键切回。 */
+  recentWorkspaces: string[];
+  onSwitchWorkspace: (path: string) => void;
   onClose: () => void;
   onOpenSession: (sessionId: string) => void;
   onNewChat: () => void;
 }
 
-/** 会话抽屉：底部弹层（bottom sheet），列出服务器会话，支持新建聊天。 */
+/** 会话抽屉：底部弹层（bottom sheet），列出服务器会话，支持新建聊天与切换项目。 */
 export function SessionDrawer({
   open,
   sessions,
@@ -38,10 +44,15 @@ export function SessionDrawer({
   error,
   activeSessionId,
   serverOrigin,
+  workspacePath,
+  recentWorkspaces,
+  onSwitchWorkspace,
   onClose,
   onOpenSession,
   onNewChat,
 }: SessionDrawerProps) {
+  const [switching, setSwitching] = useState(false);
+  const [draftPath, setDraftPath] = useState("");
   return (
     <div
       className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
@@ -130,19 +141,91 @@ export function SessionDrawer({
               );
             })}
           </ul>
-          <p className="mt-3 break-all text-center text-ui-xs text-foreground-subtlest">
-            {serverOrigin}
-          </p>
-          <button
-            type="button"
-            className="mx-auto mt-1 block rounded-lg px-3 py-2 text-ui-xs text-foreground-subtle active:bg-surface-hover"
-            onClick={() => {
-              clearStoredServerConfig();
-              window.location.reload();
-            }}
-          >
-            Change server
-          </button>
+          <div className="shrink-0 border-t border-card-border px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+            {switching ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={draftPath}
+                  onChange={(event) => setDraftPath(event.target.value)}
+                  placeholder="/Users/…/your-project"
+                  autoFocus
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  className="h-11 w-full rounded-xl border border-card-border bg-card px-3 text-ui-sm text-foreground outline-none placeholder:text-foreground-subtlest focus:border-input-border-focused"
+                />
+                {recentWorkspaces.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentWorkspaces.map((path) => (
+                      <button
+                        key={path}
+                        type="button"
+                        onClick={() => {
+                          setSwitching(false);
+                          onSwitchWorkspace(path);
+                        }}
+                        className="max-w-full truncate rounded-lg border border-card-border bg-card px-2.5 py-1.5 text-ui-xs text-foreground-subtle active:bg-surface-hover"
+                      >
+                        {path.split("/").filter(Boolean).pop() || path}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSwitching(false)}
+                    className="h-10 flex-1 rounded-xl border border-card-border bg-card text-ui-sm font-medium text-foreground-subtle active:bg-surface-hover"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!draftPath.trim()}
+                    onClick={() => {
+                      setSwitching(false);
+                      onSwitchWorkspace(draftPath);
+                    }}
+                    className="h-10 flex-1 rounded-xl bg-primary text-ui-sm font-semibold text-primary-foreground disabled:opacity-40"
+                  >
+                    Open project
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="break-all text-ui-xs text-foreground-subtlest">
+                  {workspacePath ?? "Workspace unknown"}
+                </p>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftPath("");
+                      setSwitching(true);
+                    }}
+                    className="rounded-lg px-2 py-1.5 text-ui-xs font-medium text-foreground-subtle active:bg-surface-hover"
+                  >
+                    Switch project
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearStoredServerConfig();
+                      window.location.reload();
+                    }}
+                    className="rounded-lg px-2 py-1.5 text-ui-xs text-foreground-subtlest active:bg-surface-hover"
+                  >
+                    Change server
+                  </button>
+                </div>
+                <p className="break-all text-center text-ui-xs text-foreground-subtlest/60">
+                  {serverOrigin}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
