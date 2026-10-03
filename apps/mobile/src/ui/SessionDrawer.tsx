@@ -1,4 +1,5 @@
 import type { ZCodeSessionInfo } from "@zcode/shared";
+import { clearStoredServerConfig } from "../lib/serverConfig.js";
 
 function formatRelativeTime(timestampMs: number): string {
   const deltaMs = Date.now() - timestampMs;
@@ -132,6 +133,16 @@ export function SessionDrawer({
           <p className="mt-3 break-all text-center text-ui-xs text-foreground-subtlest">
             {serverOrigin}
           </p>
+          <button
+            type="button"
+            className="mx-auto mt-1 block rounded-lg px-3 py-2 text-ui-xs text-foreground-subtle active:bg-surface-hover"
+            onClick={() => {
+              clearStoredServerConfig();
+              window.location.reload();
+            }}
+          >
+            Change server
+          </button>
         </div>
       </div>
     </div>

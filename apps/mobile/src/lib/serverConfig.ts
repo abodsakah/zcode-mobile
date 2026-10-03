@@ -146,3 +146,47 @@ export function serverHttpUrl(config: ServerConfig, path: string): string {
   }
   return base.toString();
 }
+
+/** 是否已有显式配置（URL 参数或持久化过）；都没有时首屏应是配对页而非盲目回退同源。 */
+export function hasExplicitServerConfig(search: string = window.location.search): boolean {
+  if (new URLSearchParams(search).get("server")) {
+    return true;
+  }
+  return readStorageItem(STORAGE_KEY_SERVER) !== null;
+}
+
+/** 清除持久化配置（抽屉里的“更换服务器”入口）；重载后回到配对页。 */
+export function clearStoredServerConfig(): void {
+  removeStorageItem(STORAGE_KEY_SERVER);
+  removeStorageItem(STORAGE_KEY_TOKEN);
+}
+
+export interface ParsedPairingInput {
+  origin: string;
+  token: string | null;
+}
+
+/**
+ * 解析配对页输入。接受两种形式：
+ *   1. /pair-mobile 输出的完整配对 URL（自带的 ?server= / ?token= 会被提取）；
+ *   2. 裸地址（host、host:port、http(s)://origin）——此时无令牌。
+ */
+export function parsePairingInput(input: string): ParsedPairingInput | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    const rawServer = url.searchParams.get("server");
+    if (rawServer) {
+      const origin = normalizeServerOrigin(rawServer);
+      if (!origin) return null;
+      return { origin, token: readTokenFromUrl(url.searchParams.get("token")) };
+    }
+  } catch {
+    // 不是完整 URL，按裸地址继续
+  }
+
+  const origin = normalizeServerOrigin(trimmed);
+  return origin ? { origin, token: null } : null;
+}

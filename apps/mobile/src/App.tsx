@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ServerLinkProvider,
   useServerLink,
   type ServerLinkState,
 } from "./lib/ServerLink.js";
+import { hasExplicitServerConfig } from "./lib/serverConfig.js";
 import { useWorkspace } from "./lib/workspace.js";
 import { useActiveSession, useSessions } from "./lib/sessionStore.js";
 import { useConversation } from "./lib/useConversation.js";
@@ -11,6 +12,7 @@ import { sendStopCommand } from "./lib/conversationChannel.js";
 import { useKeyboardInset } from "./lib/useKeyboardInset.js";
 import { TopBar } from "./ui/TopBar.js";
 import { SessionDrawer } from "./ui/SessionDrawer.js";
+import { PairingScreen } from "./ui/PairingScreen.js";
 import { ConversationView } from "./features/conversation/index.js";
 import {
   Composer,
@@ -213,6 +215,12 @@ function MobileShell() {
 }
 
 export function App() {
+  // 打包后的 APK 没有同源服务器可回退：没有显式配置时先显示配对页，
+  // 否则 ServerLinkProvider 会永远重连自身并卡在 "Server offline"。
+  const configured = useMemo(() => hasExplicitServerConfig(), []);
+  if (!configured) {
+    return <PairingScreen />;
+  }
   return (
     <ServerLinkProvider>
       <MobileShell />
