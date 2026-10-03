@@ -1,0 +1,9 @@
+{
+  "name": "zcode-mobile-pairing",
+  "version": "0.1.0",
+  "description": "Pair the ZCode mobile app to this Mac from the desktop UI: /pair-mobile starts a token-protected local server from the zcode-mobile fork and shows a scannable QR",
+  "author": {
+    "name": "abodsakka"
+  },
+  "commands": "./commands"
+}
